@@ -182,7 +182,7 @@ async def main():
         ]
     )
 
-    logger.info("hotosm_cli_started", args=args.model_dump())
+    logger.info("hotosm_cli_started", args=vars(args))
 
     db = get_database()
     client = HotosmClient(timeout=120.0)

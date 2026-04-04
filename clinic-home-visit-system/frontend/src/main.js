@@ -24,6 +24,7 @@ if (stored) {
   auth.token = stored
   auth.isAuthenticated = true
   auth.role = parseJwtRole(stored)
+  auth.fetchUser()
 }
 
 setAuthTokenAccessor(() => useAuthStore(pinia).token)
