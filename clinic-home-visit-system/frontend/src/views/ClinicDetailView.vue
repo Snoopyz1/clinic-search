@@ -327,13 +327,22 @@
               <!-- Select Time -->
               <div>
                 <label class="label">Giờ khám</label>
-                <select v-model="bookingForm.scheduled_time" class="input" required :disabled="!bookingForm.scheduled_date">
-                  <option value="">Chọn giờ</option>
-                  <option v-for="slot in availableSlots" :key="slot" :value="slot">{{ slot }}</option>
-                </select>
-                <p v-if="bookingForm.scheduled_date && availableSlots.length === 0" class="text-xs text-amber-600 mt-1">
-                  Không có lịch trống cho ngày này
-                </p>
+                <div v-if="slotsLoading" class="flex items-center gap-2 py-2 text-sm text-gray-400">
+                  <span class="loading-spinner border-t-primary-600 border-2 border-gray-200 border-t-2 rounded-full w-4 h-4 animate-spin"></span>
+                  Đang tải lịch trống...
+                </div>
+                <template v-else>
+                  <select v-model="bookingForm.scheduled_time" class="input" required :disabled="!bookingForm.scheduled_date || availableSlots.length === 0">
+                    <option value="">Chọn giờ</option>
+                    <option v-for="slot in availableSlots" :key="slot" :value="slot">{{ slot }}</option>
+                  </select>
+                  <p v-if="bookingForm.scheduled_date && bookingForm.doctor_id && availableSlots.length === 0" class="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    {{ slotsMessage || 'Không có lịch trống cho ngày này, vui lòng chọn ngày khác' }}
+                  </p>
+                </template>
               </div>
 
               <!-- Booking Type -->
@@ -477,6 +486,8 @@ const selectedDoctor = ref(null)
 
 // Availability
 const availableSlots = ref([])
+const slotsLoading = ref(false)
+const slotsMessage = ref('')
 
 // Auth
 const isLoggedIn = computed(() => authStore.isAuthenticated)
@@ -631,30 +642,55 @@ async function selectDoctor(doctor) {
 }
 
 // Watch date change to load slots
-watch(() => bookingForm.value.scheduled_date, async (newDate) => {
-  if (!newDate || !bookingForm.value.doctor_id) {
+async function fetchSlots() {
+  const newDate = bookingForm.value.scheduled_date
+  const doctorId = bookingForm.value.doctor_id
+  if (!newDate || !doctorId) {
     availableSlots.value = []
+    slotsMessage.value = ''
     return
   }
+  slotsLoading.value = true
+  availableSlots.value = []
+  bookingForm.value.scheduled_time = ''
+  slotsMessage.value = ''
   try {
-    const response = await api.get(`/doctors/${bookingForm.value.doctor_id}/slots`, {
+    const response = await api.get(`/doctors/${doctorId}/slots`, {
       params: { date: newDate, duration_minutes: 30 }
     })
-    availableSlots.value = (response.data?.slots || [])
+    const slots = response.data?.slots || []
+    const available = slots
       .filter(s => s.available)
       .map(s => {
         const d = new Date(s.start)
         return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
       })
+    availableSlots.value = available
+    if (available.length === 0) {
+      if (slots.length === 0) {
+        slotsMessage.value = 'Bác sĩ chưa có lịch làm việc cho ngày này, vui lòng chọn ngày khác'
+      } else {
+        slotsMessage.value = 'Tất cả giờ trong ngày này đã được đặt, vui lòng chọn ngày khác'
+      }
+    }
   } catch {
     availableSlots.value = []
+    slotsMessage.value = 'Không thể tải lịch, vui lòng thử lại'
+  } finally {
+    slotsLoading.value = false
   }
-})
+}
+
+watch(() => bookingForm.value.scheduled_date, fetchSlots)
 
 // Watch doctor change
 watch(() => bookingForm.value.doctor_id, () => {
   availableSlots.value = []
   bookingForm.value.scheduled_time = ''
+  slotsMessage.value = ''
+  if (bookingForm.value.scheduled_date) {
+    fetchSlots()
+  }
 })
 
 // Booking submit
