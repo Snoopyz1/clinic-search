@@ -113,13 +113,23 @@
               </div>
             </div>
 
-            <!-- Regular User only: Browse clinics -->
-            <router-link v-if="!isAdmin && !isClinicOwner" to="/clinics" class="nav-link text-sm font-medium text-gray-600 hover:text-gray-900">
+            <!-- Doctor Only: Work Schedule -->
+            <div v-if="isDoctor && !isAdmin" class="relative" ref="doctorDropdownRef">
+              <router-link to="/doctor/dashboard"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150"
+                :class="isDoctorRoute ? 'bg-sky-50 text-sky-700' : 'text-sky-600 hover:bg-sky-50'">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                Lịch làm việc
+              </router-link>
+            </div>
+            <router-link v-if="!isAdmin && !isClinicOwner && !isDoctor" to="/clinics" class="nav-link text-sm font-medium text-gray-600 hover:text-gray-900">
               Tìm phòng khám
             </router-link>
 
             <!-- Regular User only: Lịch hẹn link (not for admin/clinic_owner) -->
-            <router-link v-if="!isAdmin && !isClinicOwner" to="/bookings" class="nav-link text-sm font-medium text-gray-600 hover:text-gray-900">
+            <router-link v-if="!isAdmin && !isClinicOwner && !isDoctor" to="/bookings" class="nav-link text-sm font-medium text-gray-600 hover:text-gray-900">
               Lịch hẹn
             </router-link>
 
@@ -136,6 +146,7 @@
                 <span class="text-sm font-medium text-gray-700">{{ user?.full_name || 'Tài khoản' }}</span>
                 <span v-if="isAdmin" class="hidden md:inline text-xs px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">Admin</span>
                 <span v-if="isClinicOwner" class="hidden md:inline text-xs px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Chủ PK</span>
+                <span v-if="isDoctor" class="hidden md:inline text-xs px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 font-medium">Bác sĩ</span>
               </button>
               <div v-if="userMenuOpen" class="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
                 <div class="px-4 py-2 border-b border-gray-100">
@@ -185,8 +196,10 @@ const isLoggedIn = computed(() => authStore.isAuthenticated)
 const user = computed(() => authStore.user)
 const isAdmin = computed(() => authStore.isAdmin)
 const isClinicOwner = computed(() => authStore.isClinicOwner)
+const isDoctor = computed(() => authStore.isDoctor)
 const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 const isOwnerRoute = computed(() => route.path.startsWith('/owner'))
+const isDoctorRoute = computed(() => route.path.startsWith('/doctor'))
 
 const handleLogout = async () => {
   userMenuOpen.value = false

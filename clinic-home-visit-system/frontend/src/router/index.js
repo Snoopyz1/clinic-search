@@ -86,6 +86,12 @@ const routes = [
     component: () => import('../views/OwnerDoctorsView.vue'),
     meta: { requiresClinicOwner: true },
   },
+  {
+    path: '/doctor/dashboard',
+    name: 'DoctorDashboard',
+    component: () => import('../views/DoctorDashboardView.vue'),
+    meta: { requiresDoctor: true },
+  },
 ]
 
 const router = createRouter({
@@ -111,6 +117,8 @@ router.beforeEach((to, from, next) => {
   } else if (to.meta.requiresAdmin && !auth.isAdmin) {
     next({ name: 'Home' })
   } else if (to.meta.requiresClinicOwner && !auth.isClinicOwner) {
+    next({ name: 'Home' })
+  } else if (to.meta.requiresDoctor && !auth.isDoctor) {
     next({ name: 'Home' })
   } else if (to.meta.requiresClinicOwnerOrAdmin && !auth.isAdmin && !auth.isClinicOwner) {
     next({ name: 'Home' })
