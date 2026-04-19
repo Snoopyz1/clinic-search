@@ -1,7 +1,7 @@
 <template>
-  <router-link
-    :to="`/clinics/${clinic.id}`"
-    class="clinic-card flex group"
+  <div
+    @click="goToClinic"
+    class="clinic-card flex group cursor-pointer hover:shadow-md transition-shadow"
   >
     <!-- Specialty Accent Bar -->
     <div
@@ -95,11 +95,14 @@
         </svg>
       </div>
     </div>
-  </router-link>
+  </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const props = defineProps({
   clinic: {
@@ -107,6 +110,12 @@ const props = defineProps({
     required: true,
   },
 })
+
+const goToClinic = () => {
+  if (props.clinic && props.clinic.id) {
+    router.push(`/clinics/${props.clinic.id}`)
+  }
+}
 
 // Specialty configuration map
 const specialtyConfig = computed(() => {

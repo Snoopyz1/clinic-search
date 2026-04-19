@@ -276,11 +276,10 @@
                   <th>Ghi chú / Địa chỉ</th>
                   <th>Thanh toán</th>
                   <th>Trạng thái</th>
-                  <th>Hành động</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="b in patients" :key="b.id" class="patient-row">
+                <tr v-for="b in patients" :key="b.id" class="patient-row cursor-pointer hover:bg-gray-50 transition-colors" @click="selectedBooking = b">
                   <td>
                     <span class="booking-id-chip">{{ b.id.slice(0, 8) }}…</span>
                   </td>
@@ -309,41 +308,6 @@
                     <span class="booking-status-pill" :class="getStatusClass(b.status)">
                       {{ getStatusLabel(b.status) }}
                     </span>
-                  </td>
-                  <td>
-                    <div class="action-btns">
-                      <button
-                        v-if="b.status === 'pending'"
-                        class="action-btn btn-confirm"
-                        :disabled="updatingId === b.id"
-                        @click="updatePatientStatus(b, 'confirmed')"
-                        title="Xác nhận"
-                      >
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        Xác nhận
-                      </button>
-                      <button
-                        v-if="b.status === 'confirmed'"
-                        class="action-btn btn-start"
-                        :disabled="updatingId === b.id"
-                        @click="updatePatientStatus(b, 'in_progress')"
-                        title="Bắt đầu khám"
-                      >
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        Bắt đầu
-                      </button>
-                      <button
-                        v-if="b.status === 'in_progress'"
-                        class="action-btn btn-complete"
-                        :disabled="updatingId === b.id"
-                        @click="updatePatientStatus(b, 'completed')"
-                        title="Hoàn thành"
-                      >
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        Hoàn thành
-                      </button>
-                      <span v-if="updatingId === b.id" class="updating-spinner"></span>
-                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -410,6 +374,28 @@
             <span class="detail-label">Thanh toán</span>
             <span class="detail-value">{{ selectedBooking.payment_method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản' }}</span>
           </div>
+        </div>
+        <!-- Modal Action Buttons -->
+        <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid #f0f0f0; display: flex; gap: 10px; justify-content: flex-end;">
+          <button
+            v-if="selectedBooking.status === 'confirmed'"
+            class="action-btn btn-start"
+            :disabled="updatingId === selectedBooking.id"
+            @click="updatePatientStatus(selectedBooking, 'in_progress'); selectedBooking = null"
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Bắt đầu khám
+          </button>
+          <button
+            v-if="selectedBooking.status === 'in_progress'"
+            class="action-btn btn-complete"
+            :disabled="updatingId === selectedBooking.id"
+            @click="updatePatientStatus(selectedBooking, 'completed'); selectedBooking = null"
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Hoàn thành
+          </button>
+          <button class="action-btn" style="background:#f3f4f6;color:#374151;" @click="selectedBooking = null">Đóng</button>
         </div>
       </div>
     </div>

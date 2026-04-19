@@ -13,7 +13,7 @@
             <span class="text-lg font-bold">Chủ phòng khám</span>
             <p class="text-xs text-emerald-300">ClinicSearch</p>
           </div>
-        </div>git add .
+        </div>
       </div>
 
       <nav class="flex-1 px-3 py-4 space-y-1">
@@ -251,8 +251,13 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">Mô tả</label>
-            <textarea v-model="form.description" rows="3" placeholder="Mô tả về phòng khám..."
+            <textarea v-model="form.description" rows="2" placeholder="Mô tả về phòng khám..."
               class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Chuyên khoa * (Ngăn cách bởi dấu phẩy)</label>
+            <input v-model="specialtiesInput" type="text" placeholder="VD: Đa khoa, Nhi khoa, Nội khoa"
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"/>
           </div>
         </div>
         <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex gap-2 justify-end">
@@ -370,6 +375,7 @@ const form = ref({
 })
 
 const showCreateModal = ref(false)
+const specialtiesInput = ref('')
 const editingClinic = ref(null)
 const viewModal = ref({ show: false, clinic: null })
 
@@ -429,6 +435,7 @@ const openEditModal = (clinic) => {
     supports_home_visit: clinic.supports_home_visit || false,
     description: clinic.description || '',
   }
+  specialtiesInput.value = (clinic.specialties || []).join(', ')
   showCreateModal.value = true
 }
 
@@ -455,6 +462,7 @@ const closeModal = () => {
     supports_home_visit: false,
     description: '',
   }
+  specialtiesInput.value = ''
 }
 
 const saveClinic = async () => {
@@ -463,9 +471,18 @@ const saveClinic = async () => {
     return
   }
 
+  const specs = specialtiesInput.value.split(',').map(s => s.trim()).filter(s => s !== '')
+  if (specs.length === 0) {
+    alert('Vui lòng nhập ít nhất một chuyên khoa')
+    return
+  }
+
   saving.value = true
   try {
-    const payload = { ...form.value }
+    const payload = { 
+      ...form.value,
+      specialties: specs
+    }
     if (editingClinic.value) {
       await api.put(`/clinics/${editingClinic.value.id}`, payload)
     } else {
@@ -475,7 +492,12 @@ const saveClinic = async () => {
     await fetchClinics()
   } catch (error) {
     console.error('Error saving clinic:', error)
-    alert('Lỗi khi lưu phòng khám: ' + (error.response?.data?.detail || error.message))
+    let errorMsg = error.message
+    if (error.response?.data?.detail) {
+      const detail = error.response.data.detail
+      errorMsg = typeof detail === 'string' ? detail : JSON.stringify(detail)
+    }
+    alert('Lỗi khi lưu phòng khám: ' + errorMsg)
   } finally {
     saving.value = false
   }
