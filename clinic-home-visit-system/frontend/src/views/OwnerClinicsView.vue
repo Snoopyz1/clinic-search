@@ -13,7 +13,7 @@
             <span class="text-lg font-bold">Chủ phòng khám</span>
             <p class="text-xs text-emerald-300">ClinicSearch</p>
           </div>
-        </div>
+        </div>git add .
       </div>
 
       <nav class="flex-1 px-3 py-4 space-y-1">
