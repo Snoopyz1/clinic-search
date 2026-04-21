@@ -129,7 +129,13 @@
               </div>
               <div>
                 <p class="text-xs text-gray-400">Đánh giá</p>
-                <p class="text-sm font-semibold text-gray-800">{{ clinic.rating ? clinic.rating.toFixed(1) : '—' }}</p>
+                <p class="text-sm font-semibold text-gray-800">
+                  <span v-if="averageRating">
+                    {{ averageRating.toFixed(1) }}
+                    <span class="text-xs font-normal text-gray-400">({{ totalReviews }})</span>
+                  </span>
+                  <span v-else>—</span>
+                </p>
               </div>
             </div>
           </div>
@@ -230,7 +236,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
               </svg>
               Đánh giá
-              <span v-if="reviews.length" class="ml-1 text-sm font-normal text-gray-400">({{ reviews.length }})</span>
+              <span v-if="totalReviews" class="ml-1 text-sm font-normal text-gray-400">({{ totalReviews }})</span>
             </h2>
 
             <div v-if="reviewsLoading" class="flex justify-center py-8">
@@ -462,6 +468,8 @@ const authStore = useAuthStore()
 const clinic = ref(null)
 const doctors = ref([])
 const reviews = ref([])
+const averageRating = ref(null)
+const totalReviews = ref(0)
 const loading = ref(true)
 const doctorsLoading = ref(false)
 const reviewsLoading = ref(false)
@@ -620,14 +628,16 @@ async function fetchReviews() {
       params: { page_size: 10 }
     })
     reviews.value = response.data?.reviews || []
-    // Update clinic rating if reviews exist
-    if (reviews.value.length > 0) {
-      const avg = reviews.value.reduce((sum, r) => sum + r.rating, 0) / reviews.value.length
-      clinic.value = { ...clinic.value, rating: Math.round(avg * 10) / 10 }
+    averageRating.value = response.data?.average_rating || null
+    totalReviews.value = response.data?.total || 0
+    // Update clinic rating display from real data
+    if (averageRating.value) {
+      clinic.value = { ...clinic.value, rating: averageRating.value }
     }
   } catch (err) {
-    // Review service might not have reviews yet — that's ok
     reviews.value = []
+    averageRating.value = null
+    totalReviews.value = 0
   } finally {
     reviewsLoading.value = false
   }

@@ -15,6 +15,10 @@
 
       <div class="bg-white rounded-xl shadow p-6">
         <div class="space-y-4">
+          <div v-if="user?.role === 'patient'">
+            <label class="block text-sm font-medium text-gray-700">ID bệnh nhân</label>
+            <p class="mt-1 text-lg font-mono text-indigo-600">{{ user?.id }}</p>
+          </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">Họ và tên</label>
             <p class="mt-1 text-lg">{{ user?.full_name }}</p>
