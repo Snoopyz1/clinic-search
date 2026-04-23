@@ -16,7 +16,11 @@ class BookingCreate(BaseModel):
     home_lat: Optional[float] = Field(None, ge=-90, le=90)
     home_lng: Optional[float] = Field(None, ge=-180, le=180)
     notes: Optional[str] = None
-    payment_method: str = Field(default="cash", pattern="^(cash|transfer)$")
+    payment_method: str = Field(default="qr_deposit", pattern="^(cash|transfer|qr_deposit)$")
+    # Gói khám
+    package_id: Optional[str] = Field(None)           # 'package_1' | 'package_2'
+    package_name: Optional[str] = Field(None)         # Tên gói
+    package_price: Optional[float] = Field(None, ge=0) # Giá gói
 
     @field_validator("scheduled_at", mode="before")
     @classmethod
@@ -57,6 +61,14 @@ class BookingCancel(BaseModel):
     reason: Optional[str] = None
 
 
+class MedicalRecordUpdate(BaseModel):
+    """Bác sĩ ghi hồ sơ bệnh án sau khi khám xong"""
+    diagnosis: str = Field(..., min_length=1, description="Chẩn đoán bệnh")
+    prescription: Optional[str] = Field(None, description="Đơn thuốc")
+    record_notes: Optional[str] = Field(None, description="Ghi chú của bác sĩ")
+    follow_up_date: Optional[datetime] = Field(None, description="Ngày tái khám")
+
+
 class BookingResponse(BaseModel):
     id: str
     user_id: str
@@ -80,6 +92,16 @@ class BookingResponse(BaseModel):
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    # Gói khám
+    package_id: Optional[str] = None
+    package_name: Optional[str] = None
+    package_price: Optional[float] = None
+    deposit_amount: Optional[float] = None  # 50% của package_price
+    # Hồ sơ bệnh án
+    diagnosis: Optional[str] = None
+    prescription: Optional[str] = None
+    record_notes: Optional[str] = None
+    follow_up_date: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -90,6 +112,11 @@ class BookingListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ConfirmPaymentRequest(BaseModel):
+    """Người dùng xác nhận đã chuyển khoản đặt cọc"""
+    transaction_ref: Optional[str] = Field(None, description="Mã giao dịch tham chiếu (nếu có)")
 
 
 class SlotResponse(BaseModel):

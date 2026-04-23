@@ -3,9 +3,10 @@ Clinic Service - Doctors Router
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import time, datetime, timedelta
+import os
 
 from clinic_service.models.models import Doctor, DoctorSchedule, Clinic
 from clinic_service.schemas.schemas import (
@@ -142,22 +143,64 @@ async def get_available_slots(
         .where(DoctorSchedule.day_of_week == day_of_week)
         .where(DoctorSchedule.is_active == True)
     )
-    schedule = result.scalar_one_or_none()
+    schedule = result.scalars().first()
 
+    # If no schedule found, generate default slots from 07:00 to 17:00
     if not schedule:
-        return {"slots": [], "message": "No schedule for this day"}
+        default_start = time(7, 0)
+        default_end = time(17, 0)
+        slot_duration = duration_minutes
+    else:
+        default_start = schedule.start_time
+        default_end = schedule.end_time
+        slot_duration = schedule.slot_duration_minutes
+
+    # Fetch already-booked slots for this doctor on this date from booking service DB
+    booked_times = set()
+    try:
+        booking_db_url = os.environ.get(
+            "BOOKING_DB_URL",
+            "postgresql+asyncpg://user:password@booking-db:5432/booking_db"
+        )
+        # Query booked slots via raw SQL using a separate connection or shared session
+        # We use text() to query scheduled_at times for this doctor on the target date
+        booked_result = await db.execute(
+            text(
+                "SELECT scheduled_at, duration_minutes FROM bookings "
+                "WHERE doctor_id = :doctor_id "
+                "AND DATE(scheduled_at) = :target_date "
+                "AND status IN ('pending', 'confirmed', 'in_progress')"
+            ),
+            {"doctor_id": doctor_id, "target_date": str(target_date)}
+        )
+        for row in booked_result:
+            booked_at = row[0]
+            booked_duration = row[1] or duration_minutes
+            # Mark all minutes in this booked slot as unavailable
+            booked_start = booked_at if isinstance(booked_at, datetime) else datetime.fromisoformat(str(booked_at))
+            booked_end = booked_start + timedelta(minutes=booked_duration)
+            booked_times.add(booked_start.strftime("%H:%M"))
+    except Exception:
+        # If we can't reach booking data, still show all slots (fail open)
+        booked_times = set()
 
     slots = []
-    current_time = datetime.combine(target_date, schedule.start_time)
-    end_time = datetime.combine(target_date, schedule.end_time)
+    current_time = datetime.combine(target_date, default_start)
+    end_time = datetime.combine(target_date, default_end)
+    now = datetime.utcnow() + timedelta(hours=7)  # Convert to Vietnam time (UTC+7)
 
     while current_time + timedelta(minutes=duration_minutes) <= end_time:
+        slot_key = current_time.strftime("%H:%M")
+        is_available = (
+            slot_key not in booked_times
+            and current_time > now  # Don't show past slots
+        )
         slots.append({
             "start": current_time.isoformat(),
             "end": (current_time + timedelta(minutes=duration_minutes)).isoformat(),
-            "available": True,
+            "available": is_available,
         })
-        current_time += timedelta(minutes=schedule.slot_duration_minutes)
+        current_time += timedelta(minutes=slot_duration)
 
     return {"doctor_id": doctor_id, "date": date, "slots": slots}
 

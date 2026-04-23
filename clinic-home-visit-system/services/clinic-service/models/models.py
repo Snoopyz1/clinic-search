@@ -3,8 +3,8 @@ Clinic Service - SQLAlchemy Models
 """
 import uuid
 from datetime import time
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, Time, ARRAY
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, Time
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
 
@@ -24,7 +24,7 @@ class Clinic(Base):
     lng = Column(Numeric(10, 7), nullable=False)
     phone = Column(String(20))
     email = Column(String(255))
-    specialties = Column(ARRAY(String), nullable=False)
+    specialties = Column(ARRAY(Text), nullable=False)
     opening_time = Column(Time, nullable=False)
     closing_time = Column(Time, nullable=False)
     supports_home_visit = Column(Boolean, default=False)

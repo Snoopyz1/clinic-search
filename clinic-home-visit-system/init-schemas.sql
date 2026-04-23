@@ -156,10 +156,15 @@ CREATE TABLE IF NOT EXISTS booking_schema.bookings (
     cancelled_at TIMESTAMP,
     confirmed_at TIMESTAMP,
     completed_at TIMESTAMP,
+    -- Gói khám
+    package_id VARCHAR(50),
+    package_name VARCHAR(200),
+    package_price DECIMAL(10, 2),
+    deposit_amount DECIMAL(10, 2),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT valid_duration CHECK (duration_minutes >= 30 AND duration_minutes <= 120),
-    CONSTRAINT valid_status CHECK (status IN ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'expired'))
+    CONSTRAINT valid_status CHECK (status IN ('awaiting_payment', 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'expired'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_bookings_user ON booking_schema.bookings(user_id);

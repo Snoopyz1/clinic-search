@@ -103,3 +103,47 @@ async def get_doctor_or_admin_user(
             detail="Doctor or admin access required",
         )
     return current_user
+
+
+async def get_internal_or_user(
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    x_user_role: Optional[str] = Header(None, alias="X-User-Role"),
+):
+    """Allow internal service-to-service calls via X-User-Id/Role headers (no JWT needed),
+    OR normal Bearer token auth.
+    """
+    # Internal call with headers (from review-service etc.)
+    if x_user_id and x_user_role:
+        return {"user_id": x_user_id, "role": x_user_role, "email": ""}
+
+    # Fall back to normal bearer auth
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    token = authorization.replace("Bearer ", "")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                "http://auth-service:8003/api/v1/auth/verify",
+                cookies={"access_token": token},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("valid"):
+                    return {
+                        "user_id": data["user_id"],
+                        "email": data["email"],
+                        "role": data["role"],
+                    }
+    except Exception:
+        pass
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid token",
+    )
+

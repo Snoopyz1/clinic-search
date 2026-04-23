@@ -11,10 +11,12 @@ from booking_service.models.models import Booking, BookingSlot
 from booking_service.schemas.schemas import (
     BookingCreate, BookingUpdate, BookingStatusUpdate, BookingCancel,
     BookingResponse, BookingListResponse, AdminBookingStatusUpdate,
+    ConfirmPaymentRequest, MedicalRecordUpdate,
 )
 from booking_service.utils.dependencies import (
     get_db, get_current_user, get_current_admin_user,
     get_clinic_owner_or_admin_user, get_doctor_or_admin_user,
+    get_internal_or_user,
 )
 from shared.message_broker import get_message_broker
 import structlog
@@ -47,6 +49,14 @@ def _booking_to_response(b):
         completed_at=b.completed_at,
         created_at=b.created_at,
         updated_at=b.updated_at,
+        package_id=b.package_id,
+        package_name=b.package_name,
+        package_price=float(b.package_price) if b.package_price else None,
+        deposit_amount=float(b.deposit_amount) if b.deposit_amount else None,
+        diagnosis=b.diagnosis,
+        prescription=b.prescription,
+        record_notes=b.record_notes,
+        follow_up_date=b.follow_up_date,
     )
 
 
@@ -74,6 +84,14 @@ def _build_booking_response(booking: Booking) -> BookingResponse:
         completed_at=booking.completed_at,
         created_at=booking.created_at,
         updated_at=booking.updated_at,
+        package_id=booking.package_id,
+        package_name=booking.package_name,
+        package_price=float(booking.package_price) if booking.package_price else None,
+        deposit_amount=float(booking.deposit_amount) if booking.deposit_amount else None,
+        diagnosis=booking.diagnosis,
+        prescription=booking.prescription,
+        record_notes=booking.record_notes,
+        follow_up_date=booking.follow_up_date,
     )
 
 
@@ -106,8 +124,11 @@ async def create_booking(
     if request.booking_type == "home_visit":
         if not request.home_address:
             raise HTTPException(status_code=400, detail="Home address required for home visit")
-        if not request.home_lat or not request.home_lng:
-            raise HTTPException(status_code=400, detail="Home coordinates required for home visit")
+
+    # Tính tiền đặt cọc 50% nếu có gói khám
+    deposit_amount = None
+    if request.package_price:
+        deposit_amount = round(request.package_price * 0.5, 2)
 
     booking = Booking(
         user_id=current_user["user_id"],
@@ -121,6 +142,15 @@ async def create_booking(
         home_lng=request.home_lng,
         notes=request.notes,
         payment_method=request.payment_method,
+        # Gói khám
+        package_id=request.package_id,
+        package_name=request.package_name,
+        package_price=request.package_price,
+        deposit_amount=deposit_amount,
+        total_price=request.package_price,
+        # Trạng thái ban đầu: chờ thanh toán cọc (nếu có gói) hoặc pending
+        status="awaiting_payment" if request.package_price else "pending",
+        payment_status="unpaid",
     )
     db.add(booking)
     await db.commit()
@@ -138,6 +168,51 @@ async def create_booking(
         )
     except Exception as e:
         logger.error("event_publish_failed", error=str(e))
+
+    return _build_booking_response(booking)
+
+
+@router.post("/{booking_id}/confirm-payment")
+async def confirm_deposit_payment(
+    booking_id: str,
+    request: ConfirmPaymentRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Người dùng xác nhận đã chuyển khoản đặt cọc 50%.
+    Đổi trạng thái từ awaiting_payment → pending.
+    """
+    result = await db.execute(select(Booking).where(Booking.id == booking_id))
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Chỉ chủ sở hữu booking mới được xác nhận
+    if str(booking.user_id) != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if booking.status != "awaiting_payment":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Booking đang ở trạng thái '{booking.status}', không cần xác nhận thanh toán"
+        )
+
+    booking.status = "pending"
+    booking.payment_status = "deposited"
+    if request.transaction_ref:
+        booking.payment_transaction_id = request.transaction_ref
+
+    await db.commit()
+    await db.refresh(booking)
+
+    logger.info(
+        "deposit_confirmed",
+        booking_id=str(booking.id),
+        user_id=str(booking.user_id),
+        deposit_amount=str(booking.deposit_amount),
+    )
 
     return _build_booking_response(booking)
 
@@ -179,10 +254,10 @@ async def list_my_bookings(
 @router.get("/{booking_id}")
 async def get_booking(
     booking_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_internal_or_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get booking details (owner or admin/clinic_owner/doctor)"""
+    """Get booking details (owner or admin/clinic_owner/doctor/internal service)"""
     result = await db.execute(select(Booking).where(Booking.id == booking_id))
     booking = result.scalar_one_or_none()
 
@@ -190,7 +265,8 @@ async def get_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
 
     role = current_user.get("role")
-    if role != "admin" and str(booking.user_id) != current_user["user_id"]:
+    # admin, clinic_owner, doctor, or internal calls can view any booking
+    if role not in ("admin", "clinic_owner", "doctor") and str(booking.user_id) != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized to view this booking")
 
     return _build_booking_response(booking)
@@ -203,24 +279,38 @@ async def user_update_booking_status(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """User endpoint: update status of their own booking (in_progress/completed only)"""
+    """Update booking status.
+    - Patient: can update their own booking
+    - Doctor: can update bookings assigned to them (in_progress / completed only)
+    """
     result = await db.execute(select(Booking).where(Booking.id == booking_id))
     booking = result.scalar_one_or_none()
 
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    # Ownership check
-    if str(booking.user_id) != current_user["user_id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+    role = current_user.get("role", "")
 
-    # Only allow in_progress and completed
-    if request.status not in ("in_progress", "completed"):
-        raise HTTPException(status_code=400, detail="Patients can only set status to in_progress or completed")
+    if role == "doctor":
+        # Doctor is identified by doctor_id claim OR user_id in JWT
+        doctor_id = current_user.get("doctor_id") or current_user.get("user_id")
+        if str(booking.doctor_id) != str(doctor_id):
+            raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+        # Doctor may only move to in_progress or completed
+        if request.status not in ("in_progress", "completed"):
+            raise HTTPException(status_code=400, detail="Doctors can only set status to in_progress or completed")
+    else:
+        # Regular user: must be the booking owner
+        if str(booking.user_id) != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+        if request.status not in ("in_progress", "completed"):
+            raise HTTPException(status_code=400, detail="Only in_progress or completed status is allowed here")
 
     booking.status = request.status
     if request.status == "completed":
         booking.completed_at = datetime.utcnow()
+    elif request.status == "in_progress":
+        booking.confirmed_at = booking.confirmed_at or datetime.utcnow()
 
     await db.commit()
     await db.refresh(booking)
@@ -249,14 +339,17 @@ async def cancel_booking(
     if role != "admin" and not is_owner:
         raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
 
-    if booking.status not in ["pending", "confirmed"]:
+    if booking.status not in ["awaiting_payment", "pending", "confirmed"]:
         raise HTTPException(status_code=400, detail="Cannot cancel this booking")
 
-    # 2-hour rule only applies to the owner (admins bypass)
+    # 3-ngày rule áp dụng với user thường (admin bypass)
     if role != "admin":
         time_until = booking.scheduled_at - datetime.utcnow()
-        if time_until.total_seconds() < 2 * 3600:
-            raise HTTPException(status_code=400, detail="Cannot cancel within 2 hours of appointment")
+        if time_until.total_seconds() < 3 * 24 * 3600:
+            raise HTTPException(
+                status_code=400,
+                detail="Chỉ có thể huỷ lịch trước 3 ngày so với giờ hẹn"
+            )
 
     booking.status = "cancelled"
     booking.cancellation_reason = request.reason
@@ -279,12 +372,49 @@ async def cancel_booking(
     return {"message": "Booking cancelled", "booking_id": str(booking.id)}
 
 
+@router.patch("/{booking_id}/record")
+async def update_medical_record(
+    booking_id: str,
+    request: MedicalRecordUpdate,
+    current_user: dict = Depends(get_doctor_or_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bác sĩ ghi hồ sơ bệnh án sau khi hoàn thành ca khám."""
+    result = await db.execute(select(Booking).where(Booking.id == booking_id))
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    role = current_user.get("role", "")
+    if role == "doctor":
+        doctor_id = current_user.get("doctor_id") or current_user.get("user_id")
+        if str(booking.doctor_id) != str(doctor_id):
+            raise HTTPException(status_code=403, detail="Bạn không có quyền ghi hồ sơ lịch hẹn này")
+
+    booking.diagnosis = request.diagnosis
+    booking.prescription = request.prescription
+    booking.record_notes = request.record_notes
+    booking.follow_up_date = request.follow_up_date
+
+    await db.commit()
+    await db.refresh(booking)
+
+    logger.info(
+        "medical_record_updated",
+        booking_id=str(booking.id),
+        doctor_id=str(current_user.get("user_id")),
+    )
+
+    return _build_booking_response(booking)
+
+
 # ============ Admin / Clinic Owner / Doctor Endpoints ============
 
 @router.get("/clinic/owner/all", response_model=BookingListResponse)
 async def list_owner_clinic_bookings(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=500),
     status_filter: Optional[str] = Query(None, alias="status"),
     clinic_id_filter: Optional[str] = Query(None, alias="clinic_id"),
     staff_user: dict = Depends(get_clinic_owner_or_admin_user),
@@ -504,6 +634,73 @@ async def admin_list_all_bookings(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/doctor/me/weekly")
+async def get_doctor_weekly_schedule(
+    week_start: Optional[str] = Query(None, description="Week start date YYYY-MM-DD (defaults to current week Monday)"),
+    current_user: dict = Depends(get_doctor_or_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Doctor endpoint: get own weekly schedule with bookings marked."""
+    from datetime import date, timedelta
+    from sqlalchemy import func
+
+    # Parse week_start or default to current week's Monday
+    if week_start:
+        try:
+            from datetime import date as date_type
+            start_date = datetime.strptime(week_start, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        today = datetime.utcnow().date()
+        start_date = today - timedelta(days=today.weekday())  # Monday
+
+    end_date = start_date + timedelta(days=6)  # Sunday
+
+    # Get doctor_id from JWT (doctor role stores doctor_id in sub or doctor_id claim)
+    doctor_id = current_user.get("doctor_id") or current_user.get("user_id")
+
+    # Fetch bookings for this week
+    week_start_dt = datetime.combine(start_date, __import__("datetime").time.min)
+    week_end_dt = datetime.combine(end_date, __import__("datetime").time.max)
+
+    result = await db.execute(
+        select(Booking).where(
+            and_(
+                Booking.doctor_id == doctor_id,
+                Booking.scheduled_at >= week_start_dt,
+                Booking.scheduled_at <= week_end_dt,
+            )
+        ).order_by(Booking.scheduled_at)
+    )
+    bookings = result.scalars().all()
+
+    # Group bookings by date
+    from collections import defaultdict
+    daily = defaultdict(list)
+    for b in bookings:
+        day_key = b.scheduled_at.date().isoformat()
+        daily[day_key].append(_build_booking_response(b))
+
+    # Build 7-day structure
+    days = []
+    for i in range(7):
+        d = start_date + timedelta(days=i)
+        days.append({
+            "date": d.isoformat(),
+            "weekday": d.weekday(),  # 0=Mon, 6=Sun
+            "bookings": [b.model_dump() for b in daily.get(d.isoformat(), [])],
+        })
+
+    return {
+        "week_start": start_date.isoformat(),
+        "week_end": end_date.isoformat(),
+        "doctor_id": str(doctor_id),
+        "days": days,
+        "total_bookings": len(bookings),
+    }
 
 
 @router.get("/doctor/{doctor_id}/all", response_model=BookingListResponse)

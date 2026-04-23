@@ -7,6 +7,8 @@
 ## Mục lục
 
 - [Tổng quan](#tổng-quan)
+- [Tính năng & Phân quyền](#tính-năng--phân-quyền)
+- [Tính năng Không gian (GPS)](#tính-năng-không-gian-gps)
 - [Kiến trúc](#kiến-trúc)
 - [Danh sách services](#danh-sách-services)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
@@ -38,9 +40,51 @@
 
 ---
 
+## Tính năng & Phân quyền
+
+Hệ thống cung cấp trải nghiệm chuyên biệt cho 4 vai trò (Role):
+
+### 1. Patient (Bệnh nhân)
+- **Tìm kiếm:** Tìm phòng khám theo tên, chuyên khoa, hoặc vị trí (GPS).
+- **Lọc thông minh:** Tìm các phòng khám hỗ trợ khám tại nhà nằm trong bán kính cho phép.
+- **Xem chi tiết:** Bảng giá, danh sách bác sĩ, và đánh giá.
+- **Đặt lịch:** Tại phòng khám hoặc tại nhà (kèm định vị).
+- **Đánh giá:** Để lại review/rating sau khi hoàn thành buổi khám.
+
+### 2. Doctor (Bác sĩ)
+- **Dashboard:** Quản lý danh sách bệnh nhân và lịch hẹn được phân công.
+- **Trạng thái:** Cập nhật trạng thái cuộc hẹn (Confirmed → In Progress → Completed).
+- **Chi tiết ca khám:** Xem ghi chú bệnh nhân và điều hướng đến địa chỉ khám tại nhà.
+
+### 3. Clinic Owner (Chủ phòng khám)
+- **Quản lý phòng khám:** Cập nhật thông tin dịch vụ, giờ mở cửa.
+- **Quản lý nhân sự & lịch biểu:** Thêm bác sĩ, thiết lập khung giờ làm việc.
+- **Giám sát:** Theo dõi tất cả lịch hẹn của phòng khám.
+- **Tương tác:** Phản hồi đánh giá của bệnh nhân.
+- **Thống kê:** Xem báo cáo doanh thu, lượt khám.
+
+### 4. Admin (Quản trị viên)
+- **Giám sát toàn cục:** Số lượng user, phòng khám, doanh thu tổng.
+- **Quản lý tài khoản:** Khóa/Mở khóa, thay đổi vai trò.
+- **Kiểm duyệt:** Phê duyệt phòng khám mới, xử lý báo cáo bình luận xấu.
+- **Kỹ thuật:** Truy cập hệ thống giám sát (Grafana/Prometheus).
+
+---
+
+## Tính năng Không gian (GPS)
+
+Điểm nhấn của dự án là các xử lý tính toán không gian (Spatial Data):
+
+- **Haversine Distance:** Tính toán khoảng cách đường chim bay giữa người dùng và phòng khám.
+- **OSRM Routing:** Tính toán quãng đường di chuyển thực tế và thời gian ước tính (turn-by-turn).
+- **Nominatim Geocoding:** Chuyển đổi địa chỉ dạng text thành tọa độ (Latitude / Longitude).
+- **Geofilter (Bounding Box):** Truy vấn các phòng khám nằm trong bán kính phục vụ (Home Visit Radius) của bệnh nhân.
+
+---
+
 ## Kiến trúc
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                      Trình duyệt                         │
 └────────────────────────┬────────────────────────────────┘
@@ -604,7 +648,6 @@ https://github.com/user-attachments/assets/90288400-c9fa-4101-8dde-60879c9cb102
 ![184864ce-3f29-4c01-8c14-988bd7089746](https://github.com/user-attachments/assets/e07c45c7-a016-450e-9ac1-43f2f50df9ec)
 ![05804875-c251-46f1-be00-6ebf37fb0f78](https://github.com/user-attachments/assets/a81692ee-7775-4036-9ad0-7242441564e2)
 <img width="72" height="72" alt="gray" src="https://github.com/user-attachments/assets/3d301a40-2984-430f-8d3d-8128c24bcc77" />
-
 
 ### Debug
 

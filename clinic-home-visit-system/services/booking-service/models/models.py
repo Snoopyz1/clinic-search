@@ -25,7 +25,7 @@ class Booking(Base):
     __tablename__ = "bookings"
     __table_args__ = (
         CheckConstraint("duration_minutes >= 30 AND duration_minutes <= 120", name="valid_duration"),
-        CheckConstraint("status IN ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'expired')", name="valid_status"),
+        CheckConstraint("status IN ('awaiting_payment', 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'expired')", name="valid_status"),
         {"schema": "booking_schema"},
     )
 
@@ -42,7 +42,7 @@ class Booking(Base):
     home_lng = Column(Numeric(11, 8))
     notes = Column(Text)
     total_price = Column(Numeric(10, 2))
-    payment_method = Column(String(20))  # 'cash', 'transfer', 'vnpay', 'momo'
+    payment_method = Column(String(20))  # 'cash', 'transfer', 'qr_deposit'
     payment_status = Column(String(20), default="unpaid")
     payment_transaction_id = Column(String(100))
     cancellation_reason = Column(Text)
@@ -50,6 +50,16 @@ class Booking(Base):
     cancelled_at = Column(DateTime(timezone=True))
     confirmed_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
+    # Gói khám
+    package_id = Column(String(50))        # 'package_1' | 'package_2'
+    package_name = Column(String(200))     # Tên gói
+    package_price = Column(Numeric(10, 2)) # Giá gói
+    deposit_amount = Column(Numeric(10, 2)) # Tiền đặt cọc (50%)
+    # Hồ sơ bệnh án (bác sĩ điền sau khi khám)
+    diagnosis = Column(Text)               # Chẩn đoán
+    prescription = Column(Text)            # Đơn thuốc
+    record_notes = Column(Text)            # Ghi chú của bác sĩ
+    follow_up_date = Column(DateTime(timezone=True))  # Ngày tái khám
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

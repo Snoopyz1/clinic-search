@@ -2,15 +2,31 @@
 Review Service - Reviews Router
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from review_service.models.models import Review, ReviewReport
 from review_service.schemas.schemas import ReviewCreate, ReviewReply, ReviewReport as ReviewReportSchema, ReviewResponse
 from review_service.utils.dependencies import get_db, get_current_user
 from datetime import datetime
+import httpx
 
 router = APIRouter()
+
+
+async def _get_booking(booking_id: str, user_id: str) -> dict:
+    """Call booking-service to get booking info and validate ownership + completion."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                f"http://booking-service:8002/api/v1/bookings/{booking_id}",
+                headers={"X-User-Id": user_id, "X-User-Role": "patient"},
+            )
+            if response.status_code == 200:
+                return response.json()
+    except Exception:
+        pass
+    return None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -20,14 +36,38 @@ async def create_review(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a review for a completed booking"""
-    # Check if booking exists and is completed
-    # In real implementation, verify booking belongs to user and is completed
+    user_id = current_user["user_id"]
+
+    # Check duplicate: one review per booking
+    existing = await db.execute(
+        select(Review).where(
+            Review.booking_id == request.booking_id,
+            Review.user_id == user_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Bạn đã đánh giá lịch hẹn này rồi")
+
+    # Validate booking via booking-service
+    booking = await _get_booking(request.booking_id, user_id)
+
+    if booking is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lịch hẹn")
+
+    if booking.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền đánh giá lịch hẹn này")
+
+    if booking.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Chỉ có thể đánh giá sau khi hoàn thành khám")
+
+    clinic_id = booking.get("clinic_id", "")
+    doctor_id = booking.get("doctor_id", "")
 
     review = Review(
         booking_id=request.booking_id,
-        user_id=current_user["user_id"],
-        clinic_id="",  # Would come from booking
-        doctor_id="",  # Would come from booking
+        user_id=user_id,
+        clinic_id=clinic_id,
+        doctor_id=doctor_id,
         rating=request.rating,
         comment=request.comment,
         pros=request.pros,
@@ -63,6 +103,23 @@ async def get_clinic_reviews(
     db: AsyncSession = Depends(get_db),
 ):
     """Get reviews for a clinic"""
+    # Total count
+    count_result = await db.execute(
+        select(func.count(Review.id))
+        .where(Review.clinic_id == clinic_id)
+        .where(Review.is_hidden == False)
+    )
+    total = count_result.scalar() or 0
+
+    # Average rating
+    avg_result = await db.execute(
+        select(func.avg(Review.rating))
+        .where(Review.clinic_id == clinic_id)
+        .where(Review.is_hidden == False)
+    )
+    avg_rating = avg_result.scalar()
+
+    # Reviews list
     result = await db.execute(
         select(Review)
         .where(Review.clinic_id == clinic_id)
@@ -95,6 +152,8 @@ async def get_clinic_reviews(
             )
             for r in reviews
         ],
+        "total": total,
+        "average_rating": round(float(avg_rating), 1) if avg_rating else None,
         "page": page,
         "page_size": page_size,
     }
@@ -108,6 +167,20 @@ async def get_doctor_reviews(
     db: AsyncSession = Depends(get_db),
 ):
     """Get reviews for a doctor"""
+    count_result = await db.execute(
+        select(func.count(Review.id))
+        .where(Review.doctor_id == doctor_id)
+        .where(Review.is_hidden == False)
+    )
+    total = count_result.scalar() or 0
+
+    avg_result = await db.execute(
+        select(func.avg(Review.rating))
+        .where(Review.doctor_id == doctor_id)
+        .where(Review.is_hidden == False)
+    )
+    avg_rating = avg_result.scalar()
+
     result = await db.execute(
         select(Review)
         .where(Review.doctor_id == doctor_id)
@@ -140,8 +213,31 @@ async def get_doctor_reviews(
             )
             for r in reviews
         ],
+        "total": total,
+        "average_rating": round(float(avg_rating), 1) if avg_rating else None,
         "page": page,
         "page_size": page_size,
+    }
+
+
+@router.get("/booking/{booking_id}/check")
+async def check_booking_reviewed(
+    booking_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if current user already reviewed this booking"""
+    result = await db.execute(
+        select(Review).where(
+            Review.booking_id == booking_id,
+            Review.user_id == current_user["user_id"],
+        )
+    )
+    review = result.scalar_one_or_none()
+    return {
+        "reviewed": review is not None,
+        "review_id": str(review.id) if review else None,
+        "rating": review.rating if review else None,
     }
 
 
