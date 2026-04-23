@@ -34,6 +34,11 @@ const routes = [
     component: () => import('../views/BookingsView.vue'),
   },
   {
+    path: '/bookings/:id/payment',
+    name: 'BookingPayment',
+    component: () => import('../views/BookingPaymentView.vue'),
+  },
+  {
     path: '/profile',
     name: 'Profile',
     component: () => import('../views/ProfileView.vue'),
@@ -84,6 +89,12 @@ const routes = [
     path: '/owner/doctors',
     name: 'OwnerDoctors',
     component: () => import('../views/OwnerDoctorsView.vue'),
+    meta: { requiresClinicOwner: true },
+  },
+  {
+    path: '/owner/revenue',
+    name: 'OwnerRevenue',
+    component: () => import('../views/OwnerRevenueView.vue'),
     meta: { requiresClinicOwner: true },
   },
   {

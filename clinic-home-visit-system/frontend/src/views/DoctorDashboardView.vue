@@ -52,8 +52,20 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          Quản lý Bệnh nhân
+          Quản lý lịch
           <span v-if="patientStats.pending > 0" class="tab-badge">{{ patientStats.pending }}</span>
+        </button>
+        <button
+          id="tab-records"
+          class="tab-btn"
+          :class="{ 'tab-active': activeTab === 'records' }"
+          @click="activeTab = 'records'; fetchMedicalRecords()"
+        >
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Hồ sơ bệnh án
         </button>
       </div>
     </div>
@@ -322,6 +334,254 @@
           </div>
         </div>
       </template>
+
+      <!-- ===== TAB: MEDICAL RECORDS ===== -->
+      <template v-if="activeTab === 'records'">
+        <div class="patients-card">
+          <div class="patients-header">
+            <div class="patients-title-row">
+              <h2 class="patients-title" style="display:flex;align-items:center;gap:8px;">
+                <svg style="width:22px;height:22px;color:#7c3aed;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Hồ sơ bệnh án
+              </h2>
+              <div class="patients-meta">{{ medicalRecords.length }} hồ sơ đã hoàn thành</div>
+            </div>
+            <p style="font-size:13px;color:#6b7280;margin:0;">
+              Danh sách các ca khám đã hoàn thành. Nhấn <strong>Ghi hồ sơ</strong> để điền chẩn đoán và đơn thuốc.
+            </p>
+
+            <!-- Search by patient ID -->
+            <div style="display:flex;align-items:center;gap:10px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:8px 14px;transition:border 0.2s;"
+              @focusin="$event.currentTarget.style.borderColor='#7c3aed'"
+              @focusout="$event.currentTarget.style.borderColor='#e5e7eb'"
+            >
+              <svg style="width:16px;height:16px;color:#9ca3af;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+              <input
+                v-model="recordSearchQuery"
+                type="text"
+                placeholder="Tìm hồ sơ theo ID bệnh nhân..."
+                style="flex:1;border:none;background:transparent;font-size:13px;color:#374151;outline:none;"
+              />
+              <span v-if="recordSearchQuery"
+                style="font-size:11px;color:#7c3aed;font-weight:700;background:#f0f4ff;padding:2px 8px;border-radius:20px;white-space:nowrap;"
+              >
+                {{ filteredRecords.length }} kết quả
+              </span>
+              <button v-if="recordSearchQuery"
+                @click="recordSearchQuery = ''"
+                style="border:none;background:none;cursor:pointer;color:#9ca3af;padding:0;display:flex;align-items:center;"
+              >
+                <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading -->
+          <div v-if="recordsLoading" class="loading-state">
+            <div class="spinner"></div>
+            <span>Đang tải hồ sơ...</span>
+          </div>
+
+          <!-- Empty -->
+          <div v-else-if="filteredRecords.length === 0" class="patients-empty">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p v-if="recordSearchQuery">Không tìm thấy hồ sơ với ID: <strong>{{ recordSearchQuery }}</strong></p>
+            <p v-else>Chưa có ca khám hoàn thành nào</p>
+          </div>
+
+          <!-- Records Table -->
+          <div v-else class="patients-table-wrapper">
+            <table class="patients-table">
+              <thead>
+                <tr>
+                  <th>ID bệnh nhân</th>
+                  <th>Thời gian khám</th>
+                  <th>Hình thức</th>
+                  <th>Ghi chú bệnh nhân</th>
+                  <th>Chẩn đoán</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="b in filteredRecords" :key="b.id" class="patient-row">
+                  <td>
+                    <div style="display:flex;flex-direction:column;gap:3px;">
+                      <span class="mono" style="font-size:11px;background:#f0f4ff;border:1px solid #c7d2fe;color:#3730a3;padding:2px 7px;border-radius:6px;">
+                        {{ b.user_id?.slice(0, 12) }}...
+                      </span>
+                      <span class="booking-id-chip" style="font-size:10px;">LH: {{ b.id?.slice(0,6) }}…</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="patient-datetime">
+                      <span class="patient-date">{{ formatFullDatetime(b.scheduled_at).split(' - ')[1] }}</span>
+                      <span class="patient-time">{{ formatTime(b.scheduled_at) }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="booking-type-badge" :class="b.booking_type === 'home_visit' ? 'type-home' : 'type-clinic'">
+                      {{ b.booking_type === 'home_visit' ? '🏠 Tại nhà' : '🏥 Phòng khám' }}
+                    </span>
+                  </td>
+                  <td class="patient-notes">
+                    <span v-if="b.notes" class="note-text">💬 {{ b.notes }}</span>
+                    <span v-else class="note-none">—</span>
+                  </td>
+                  <td>
+                    <span v-if="b.diagnosis"
+                      style="font-size:12px;color:#065f46;background:#ecfdf5;padding:3px 8px;border-radius:6px;border:1px solid #6ee7b7;">
+                      ✅ {{ b.diagnosis.slice(0, 30) }}{{ b.diagnosis.length > 30 ? '...' : '' }}
+                    </span>
+                    <span v-else style="font-size:12px;color:#b45309;background:#fffbeb;padding:3px 8px;border-radius:6px;border:1px solid #fcd34d;">
+                      ⏳ Chưa ghi
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      class="action-btn"
+                      style="background:linear-gradient(135deg,#4338ca,#7c3aed);color:white;font-size:12px;padding:6px 14px;"
+                      @click="openRecordModal(b)"
+                    >
+                      <svg style="width:13px;height:13px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                      </svg>
+                      Ghi hồ sơ
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- ===== Medical Record Modal ===== -->
+    <div v-if="showRecordModal" class="modal-overlay" @click.self="showRecordModal = false">
+      <div class="modal-card" style="max-width:540px;width:95%;">
+        <div class="modal-header">
+          <h3 style="display:flex;align-items:center;gap:8px;">
+            <svg style="width:20px;height:20px;color:#7c3aed;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Ghi hồ sơ bệnh án
+          </h3>
+          <button class="modal-close" @click="showRecordModal = false">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Patient info strip -->
+        <div style="background:#f8f7ff;border-bottom:1px solid #e9d5ff;padding:12px 24px;display:flex;gap:16px;flex-wrap:wrap;">
+          <div>
+            <p style="font-size:10px;color:#7c3aed;font-weight:700;text-transform:uppercase;margin:0 0 2px;">ID bệnh nhân</p>
+            <p class="mono" style="font-size:12px;color:#1e1b4b;margin:0;">{{ selectedRecord?.user_id?.slice(0,20) }}...</p>
+          </div>
+          <div>
+            <p style="font-size:10px;color:#7c3aed;font-weight:700;text-transform:uppercase;margin:0 0 2px;">Thời gian khám</p>
+            <p style="font-size:12px;color:#1e1b4b;margin:0;">{{ selectedRecord ? formatFullDatetime(selectedRecord.scheduled_at) : '' }}</p>
+          </div>
+          <div v-if="selectedRecord?.notes">
+            <p style="font-size:10px;color:#7c3aed;font-weight:700;text-transform:uppercase;margin:0 0 2px;">Ghi chú bệnh nhân</p>
+            <p style="font-size:12px;color:#374151;margin:0;">{{ selectedRecord.notes }}</p>
+          </div>
+        </div>
+
+        <div class="modal-body" style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
+          <!-- Patient booking notes (read-only) - always shown -->
+          <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px 16px;">
+            <p style="font-size:11px;font-weight:700;color:#0284c7;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 6px;display:flex;align-items:center;gap:5px;">
+              <svg style="width:13px;height:13px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+              Mô tả của bệnh nhân khi đặt lịch
+            </p>
+            <p v-if="selectedRecord?.notes" style="font-size:13px;color:#075985;margin:0;line-height:1.6;">{{ selectedRecord.notes }}</p>
+            <p v-else style="font-size:13px;color:#7dd3fc;margin:0;font-style:italic;">Bệnh nhân không để lại mô tả</p>
+          </div>
+
+          <!-- Diagnosis -->
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">
+              Chẩn đoán <span style="color:#ef4444;">*</span>
+            </label>
+            <textarea
+              v-model="recordForm.diagnosis"
+              rows="3"
+              placeholder="Nhập chẩn đoán bệnh, ví dụ: Viêm họng cấp, cao huyết áp giai đoạn 1..."
+              style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:13px;resize:vertical;outline:none;transition:border 0.2s;"
+              @focus="$event.target.style.borderColor='#7c3aed'"
+              @blur="$event.target.style.borderColor='#e5e7eb'"
+            ></textarea>
+          </div>
+
+          <!-- Prescription -->
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">Đơn thuốc</label>
+            <textarea
+              v-model="recordForm.prescription"
+              rows="3"
+              placeholder="Tên thuốc - liều lượng - cách dùng, mỗi thuốc 1 dòng..."
+              style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:13px;resize:vertical;outline:none;transition:border 0.2s;"
+              @focus="$event.target.style.borderColor='#7c3aed'"
+              @blur="$event.target.style.borderColor='#e5e7eb'"
+            ></textarea>
+          </div>
+
+          <!-- Doctor notes -->
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">Ghi chú của bác sĩ</label>
+            <textarea
+              v-model="recordForm.notes"
+              rows="2"
+              placeholder="Lời dặn, hướng dẫn chế độ sinh hoạt, kiêng kỵ..."
+              style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:13px;resize:vertical;outline:none;transition:border 0.2s;"
+              @focus="$event.target.style.borderColor='#7c3aed'"
+              @blur="$event.target.style.borderColor='#e5e7eb'"
+            ></textarea>
+          </div>
+
+          <!-- Follow-up date -->
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">Ngày tái khám (nếu có)</label>
+            <input
+              v-model="recordForm.follow_up_date"
+              type="date"
+              style="border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 12px;font-size:13px;outline:none;transition:border 0.2s;"
+              @focus="$event.target.style.borderColor='#7c3aed'"
+              @blur="$event.target.style.borderColor='#e5e7eb'"
+            />
+          </div>
+
+          <!-- Messages -->
+          <div v-if="recordMsg === 'success'" style="background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;padding:10px 14px;border-radius:10px;font-size:13px;text-align:center;">
+            ✅ Lưu hồ sơ thành công!
+          </div>
+          <div v-else-if="recordMsg" style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;padding:10px 14px;border-radius:10px;font-size:13px;">
+            {{ recordMsg }}
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding:16px 24px;border-top:1px solid #f0f0f0;display:flex;gap:10px;justify-content:flex-end;">
+          <button style="background:#f3f4f6;color:#374151;padding:8px 18px;border:none;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer;" @click="showRecordModal = false">Huỷ</button>
+          <button
+            :disabled="recordSaving"
+            style="background:linear-gradient(135deg,#4338ca,#7c3aed);color:white;padding:8px 22px;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;"
+            @click="saveRecord"
+          >
+            <span v-if="recordSaving" style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;"></span>
+            {{ recordSaving ? 'Đang lưu...' : 'Lưu hồ sơ' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Booking Detail Modal -->
@@ -339,6 +599,18 @@
           <div class="detail-row">
             <span class="detail-label">Mã lịch hẹn</span>
             <span class="detail-value mono">{{ selectedBooking.id?.slice(0, 8) }}...</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">ID bệnh nhân</span>
+            <span class="detail-value" style="display:flex;align-items:center;gap:8px;">
+              <span class="mono" style="font-size:12px;background:#f0f4ff;border:1px solid #c7d2fe;color:#3730a3;padding:3px 10px;border-radius:8px;letter-spacing:0.5px;">
+                {{ selectedBooking.user_id?.slice(0, 16) }}...
+              </span>
+              <button
+                style="font-size:11px;color:#6366f1;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;"
+                @click="copyToClipboard(selectedBooking.user_id)"
+              >Sao chép</button>
+            </span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Thời gian</span>
@@ -618,6 +890,80 @@ function openBookingDetail(booking) {
   selectedBooking.value = booking
 }
 
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => alert('Đã sao chép ID bệnh nhân!'))
+}
+
+// ===== Medical Records State =====
+const medicalRecords = ref([])
+const recordsLoading = ref(false)
+const selectedRecord = ref(null)
+const showRecordModal = ref(false)
+const recordForm = ref({ diagnosis: '', prescription: '', notes: '', follow_up_date: '' })
+const recordSaving = ref(false)
+const recordMsg = ref('')
+const recordSearchQuery = ref('')
+
+const filteredRecords = computed(() => {
+  if (!recordSearchQuery.value.trim()) return medicalRecords.value
+  const q = recordSearchQuery.value.trim().toLowerCase()
+  return medicalRecords.value.filter(b =>
+    b.user_id?.toLowerCase().includes(q)
+  )
+})
+
+async function fetchMedicalRecords() {
+  recordsLoading.value = true
+  try {
+    const doctorId = authStore.user?.doctor_id || authStore.user?.id
+    const res = await api.get(`/bookings/doctor/${doctorId}/all`, {
+      params: { status: 'completed', page_size: 50 }
+    })
+    medicalRecords.value = res.data.bookings || []
+  } catch {
+    medicalRecords.value = []
+  } finally {
+    recordsLoading.value = false
+  }
+}
+
+function openRecordModal(booking) {
+  selectedRecord.value = booking
+  recordForm.value = {
+    diagnosis: booking.diagnosis || '',
+    prescription: booking.prescription || '',
+    notes: booking.record_notes || '',
+    follow_up_date: booking.follow_up_date || '',
+  }
+  recordMsg.value = ''
+  showRecordModal.value = true
+}
+
+async function saveRecord() {
+  if (!recordForm.value.diagnosis) { recordMsg.value = 'Vui lòng nhập chẩn đoán'; return }
+  recordSaving.value = true
+  recordMsg.value = ''
+  try {
+    await api.patch(`/bookings/${selectedRecord.value.id}/record`, {
+      diagnosis: recordForm.value.diagnosis,
+      prescription: recordForm.value.prescription,
+      record_notes: recordForm.value.notes,
+      follow_up_date: recordForm.value.follow_up_date || null,
+    })
+    // Update local data
+    const idx = medicalRecords.value.findIndex(b => b.id === selectedRecord.value.id)
+    if (idx !== -1) {
+      medicalRecords.value[idx] = { ...medicalRecords.value[idx], ...recordForm.value }
+    }
+    recordMsg.value = 'success'
+    setTimeout(() => { showRecordModal.value = false }, 1200)
+  } catch (e) {
+    recordMsg.value = e.response?.data?.detail || 'Lưu hồ sơ thất bại'
+  } finally {
+    recordSaving.value = false
+  }
+}
+
 // Watch week changes
 watch(currentWeekStart, () => fetchWeeklySchedule())
 
@@ -701,6 +1047,19 @@ onMounted(() => fetchWeeklySchedule())
   box-shadow: 0 4px 24px rgba(0,0,0,0.08);
   border: 1px solid rgba(255,255,255,0.8);
   overflow: hidden;
+}
+
+.mono {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.booking-id-chip {
+  font-family: monospace;
+  font-size: 12px;
+  background: #f3f4f6;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #374151;
 }
 
 .patients-header {

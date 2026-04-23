@@ -68,7 +68,7 @@
               </svg>
               Khám tại nhà
             </span>
-            <span v-if="clinic.is_verified" class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">
+            <span v-if="clinic.is_verified" class="inline-flex items-center gap-1 bg-red-500 text-blue-700 border border-red-800 px-3 py-1 rounded-full text-xs font-medium">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
               </svg>
@@ -405,13 +405,63 @@
                 ></textarea>
               </div>
 
-              <!-- Payment -->
+              <!-- Package Selection -->
               <div>
-                <label class="label">Thanh toán</label>
-                <select v-model="bookingForm.payment_method" class="input">
-                  <option value="cash">Tiền mặt</option>
-                  <option value="transfer">Chuyển khoản</option>
-                </select>
+                <div class="flex items-center justify-between mb-2">
+                  <label class="label mb-0">Gói khám <span class="text-red-500">*</span></label>
+                  <span v-if="bookingForm.booking_type === 'home_visit'"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                    </svg>
+                    Gói dành cho khám tại nhà
+                  </span>
+                  <span v-else
+                    class="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                    Gói tại phòng khám
+                  </span>
+                </div>
+                <div class="space-y-2">
+                  <label v-for="pkg in currentPackages" :key="pkg.id"
+                    class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all"
+                    :class="bookingForm.package_id === pkg.id
+                      ? (bookingForm.booking_type === 'home_visit' ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200' : 'border-primary-300 bg-primary-50 ring-1 ring-primary-200')
+                      : 'border-gray-200 hover:border-gray-300'"
+                  >
+                    <input v-model="bookingForm.package_id" type="radio" :value="pkg.id" class="text-primary-600 mt-0.5" />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1.5">
+                          <!-- Icon cho home visit -->
+                          <svg v-if="bookingForm.booking_type === 'home_visit'" class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                          </svg>
+                          <p class="text-sm font-semibold text-gray-800">{{ pkg.name }}</p>
+                        </div>
+                        <span class="text-sm font-bold flex-shrink-0"
+                          :class="bookingForm.booking_type === 'home_visit' ? 'text-emerald-700' : 'text-primary-700'">
+                          {{ formatPrice(pkg.price) }}
+                        </span>
+                      </div>
+                      <p class="text-xs text-gray-400 mt-1 leading-relaxed">{{ pkg.description }}</p>
+                      <!-- Included items -->
+                      <div class="flex flex-wrap gap-1 mt-1.5">
+                        <span v-for="item in pkg.includes" :key="item"
+                          class="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-md"
+                          :class="bookingForm.booking_type === 'home_visit' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'">
+                          <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                          </svg>
+                          {{ item }}
+                        </span>
+                      </div>
+                      <p class="text-xs text-amber-600 font-medium mt-1.5">Đặt cọc 50%: {{ formatPrice(pkg.price * 0.5) }}</p>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <!-- Error -->
@@ -427,11 +477,11 @@
               <!-- Submit -->
               <button
                 type="submit"
-                :disabled="bookingLoading"
+                :disabled="bookingLoading || !bookingForm.package_id"
                 class="w-full bg-primary-600 text-white py-3 px-4 rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium text-sm transition-colors flex items-center justify-center gap-2"
               >
                 <span v-if="bookingLoading" class="loading-spinner border-t-white border-2 border-white/30 border-t-2 rounded-full w-4 h-4 animate-spin"></span>
-                {{ bookingLoading ? 'Đang đặt...' : 'Xác nhận đặt lịch' }}
+                {{ bookingLoading ? 'Đang đặt...' : 'Xác nhận & Thanh toán cọc' }}
               </button>
             </form>
           </div>
@@ -483,11 +533,60 @@ const bookingForm = ref({
   booking_type: 'at_clinic',
   home_address: '',
   notes: '',
-  payment_method: 'cash',
+  payment_method: 'qr_deposit',
+  package_id: '',
 })
 const bookingError = ref('')
 const bookingSuccess = ref('')
 const bookingLoading = ref(false)
+
+// Gói khám tại phòng khám
+const clinicPackages = [
+  {
+    id: 'clinic_pkg_1',
+    name: 'Gói Cơ bản',
+    description: 'Khám tổng quát, đo dấu hiệu sinh tồn, tư vấn bác sĩ và kết quả chẩn đoán',
+    price: 300000,
+    includes: ['Khám tổng quát', 'Tư vấn bác sĩ', 'Kê đơn thuốc'],
+  },
+  {
+    id: 'clinic_pkg_2',
+    name: 'Gói Nâng cao',
+    description: 'Khám tổng quát kết hợp xét nghiệm máu, điện tim (ECG) và siêu âm tổng quát',
+    price: 900000,
+    includes: ['Khám tổng quát', 'Xét nghiệm máu', 'Điện tim ECG', 'Siêu âm'],
+  },
+]
+
+// Gói khám tại nhà (phù hợp điều kiện khám tận nơi)
+const homeVisitPackages = [
+  {
+    id: 'home_pkg_1',
+    name: 'Gói Thăm khám Cơ bản',
+    description: 'Bác sĩ đến nhà đo sinh hiệu, khám tổng quát, tư vấn sức khỏe và kê đơn thuốc phù hợp',
+    price: 450000,
+    includes: ['Đo sinh hiệu', 'Khám tổng quát', 'Kê đơn thuốc'],
+  },
+  {
+    id: 'home_pkg_2',
+    name: 'Gói Chăm sóc Người cao tuổi',
+    description: 'Chuyên dành cho người cao tuổi, người bệnh mãn tính: kiểm tra huyết áp, đường huyết, tim mạch tại nhà',
+    price: 650000,
+    includes: ['Đo huyết áp', 'Đo đường huyết', 'Tư vấn dinh dưỡng', 'Kê đơn định kỳ'],
+  },
+  {
+    id: 'home_pkg_3',
+    name: 'Gói Hậu sản & Hồi phục',
+    description: 'Dành cho sản phụ sau sinh, bệnh nhân hậu phẫu: kiểm tra vết thương, thay băng, hướng dẫn phục hồi',
+    price: 550000,
+    includes: ['Kiểm tra vết mổ', 'Thay băng', 'Hướng dẫn phục hồi', 'Tư vấn dinh dưỡng'],
+  },
+]
+
+// Computed: lấy đúng danh sách gói theo hình thức khám
+const currentPackages = computed(() =>
+  bookingForm.value.booking_type === 'home_visit' ? homeVisitPackages : clinicPackages
+)
 
 // Selected doctor
 const selectedDoctor = ref(null)
@@ -693,6 +792,11 @@ async function fetchSlots() {
 
 watch(() => bookingForm.value.scheduled_date, fetchSlots)
 
+// Reset gói khám khi đổi hình thức khám
+watch(() => bookingForm.value.booking_type, () => {
+  bookingForm.value.package_id = ''
+})
+
 // Watch doctor change
 watch(() => bookingForm.value.doctor_id, () => {
   availableSlots.value = []
@@ -720,11 +824,18 @@ async function handleBooking() {
     bookingError.value = 'Vui lòng chọn giờ khám'
     return
   }
+  if (!bookingForm.value.package_id) {
+    bookingError.value = 'Vui lòng chọn gói khám'
+    return
+  }
+
+  const allPackages = [...clinicPackages, ...homeVisitPackages]
+  const selectedPkg = allPackages.find(p => p.id === bookingForm.value.package_id)
 
   bookingLoading.value = true
   try {
     const scheduledAt = `${bookingForm.value.scheduled_date}T${bookingForm.value.scheduled_time}:00`
-    await api.post('/bookings', {
+    const res = await api.post('/bookings', {
       clinic_id: route.params.id,
       doctor_id: bookingForm.value.doctor_id,
       booking_type: bookingForm.value.booking_type,
@@ -732,11 +843,15 @@ async function handleBooking() {
       duration_minutes: 30,
       home_address: bookingForm.value.booking_type === 'home_visit' ? bookingForm.value.home_address : undefined,
       notes: bookingForm.value.notes || undefined,
-      payment_method: bookingForm.value.payment_method,
+      payment_method: 'qr_deposit',
+      package_id: selectedPkg.id,
+      package_name: selectedPkg.name,
+      package_price: selectedPkg.price,
     })
 
-    bookingSuccess.value = 'Đặt lịch thành công! Bạn sẽ được chuyển đến trang lịch hẹn.'
-    setTimeout(() => router.push('/bookings'), 2000)
+    // Redirect sang trang thanh toán cọc
+    bookingSuccess.value = 'Tạo đơn thành công! Đang chuyển sang trang thanh toán...'
+    setTimeout(() => router.push(`/bookings/${res.data.id}/payment`), 1000)
   } catch (err) {
     bookingError.value = err.response?.data?.detail || 'Đặt lịch thất bại. Vui lòng thử lại.'
   } finally {
